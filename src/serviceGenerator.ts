@@ -1,4 +1,4 @@
-import {existsSync, readFileSync} from 'fs';
+import {readFileSync} from 'fs';
 import glob from 'glob';
 import {camelCase, isArray, isBoolean} from 'lodash';
 import * as nunjucks from 'nunjucks';
@@ -18,37 +18,18 @@ import {join} from 'path';
 import ReservedDict from 'reserved-words';
 import rimraf from 'rimraf';
 import pinyin from 'tiny-pinyin';
-import type {GenerateServiceProps} from './index';
 import Log from './log';
+import type {
+    APIDataType,
+    ControllerType,
+    GenerateServiceProps,
+    MappingItemType,
+    TagAPIDataType,
+    TypescriptFileType
+} from './type';
 import {stripDot, writeFile} from './util';
+import * as process from "process";
 
-const BASE_DIRS = ['service', 'services'];
-
-export type TypescriptFileType = 'interface' | 'serviceController' | 'serviceIndex';
-
-export interface APIDataType extends OperationObject {
-    path: string;
-    method: string;
-}
-
-export type TagAPIDataType = Record<string, APIDataType[]>;
-
-export interface MappingItemType {
-    antTechApi: string;
-    popAction: string;
-    popProduct: string;
-    antTechVersion: string;
-}
-
-export interface ControllerType {
-    fileName: string;
-    controllerName: string;
-}
-
-export const getPath = () => {
-    const cwd = process.cwd();
-    return existsSync(join(cwd, 'src')) ? join(cwd, 'src') : cwd;
-};
 
 // 兼容C#泛型的typeLastName取法
 function getTypeLastName(typeName) {
@@ -237,39 +218,6 @@ const defaultGetType = (schemaObject: SchemaObject | undefined, namespace: strin
     return 'any';
 };
 
-export const getGenInfo = (isDirExist: boolean, appName: string, absSrcPath: string) => {
-    // dir 不存在，则没有占用，且为第一次
-    if (!isDirExist) {
-        return [false, true];
-    }
-    const indexList = glob.sync(`@(${BASE_DIRS.join('|')})/${appName}/index.@(js|ts)`, {
-        cwd: absSrcPath,
-    });
-    // dir 存在，且 index 存在
-    if (indexList && indexList.length) {
-        const indexFile = join(absSrcPath, indexList[0]);
-        try {
-            const line = (readFileSync(indexFile, 'utf-8') || '').split(/\r?\n/).slice(0, 3).join('');
-            // dir 存在，index 存在， 且 index 是我们生成的。则未占用，且不是第一次
-            if (line.includes('// API 更新时间：')) {
-                return [false, false];
-            }
-            // dir 存在，index 存在，且 index 内容不是我们生成的。此时如果 openAPI 子文件存在，就不是第一次，否则是第一次
-            return [true, !existsSync(join(indexFile, 'openAPI'))];
-        } catch (e) {
-            // 因为 glob 已经拿到了这个文件，但没权限读，所以当作 dirUsed, 在子目录重新新建，所以当作 firstTime
-            return [true, true];
-        }
-    }
-    // dir 存在，index 不存在, 冲突，第一次要看 dir 下有没有 openAPI 文件夹
-    return [
-        true,
-        !(
-            existsSync(join(absSrcPath, BASE_DIRS[0], appName, 'openAPI')) ||
-            existsSync(join(absSrcPath, BASE_DIRS[1], appName, 'openAPI'))
-        ),
-    ];
-};
 
 const DEFAULT_SCHEMA: SchemaObject = {
     type: 'object',
@@ -296,57 +244,69 @@ function defaultGetFileTag(operationObject: OperationObject, apiPath: string, _a
 }
 
 class ServiceGenerator {
-    protected apiData: TagAPIDataType = {};
+    protected apiData: TagAPIDataType = {}; // 存储按标签分类的API数据，键为标签名，值为对应的API操作对象数组
 
-    protected classNameList: ControllerType[] = [];
+    protected classNameList: ControllerType[] = []; // 存储控制器类名列表，每个元素包含文件名和控制器名
 
-    protected version: string;
+    protected version: string; // 存储API的版本号
 
-    protected mappings: MappingItemType[] = [];
+    protected mappings: MappingItemType[] = []; // 存储API映射信息，用于不同系统间的API对应关系
 
-    protected finalPath: string;
+    protected finalPath: string; // 存储最终生成文件的路径
 
-    protected config: GenerateServiceProps;
-    protected openAPIData: OpenAPIObject;
+    protected config: GenerateServiceProps; // 存储服务生成器的配置选项
+    protected openAPIData: OpenAPIObject; // 存储解析后的OpenAPI规范数据
 
+    // 该部分初始化 ServiceGenerator 类，负责根据 OpenAPI 规范生成服务文件。
+    // 它存储按标签分类的 API 数据，维护控制器类名列表，并处理 API 版本和映射关系。
+    // 构造函数接受配置选项和 OpenAPI 数据作为参数，允许对生成的服务进行自定义。
+    // 该类还包括一个方法，用于根据处理后的 API 数据生成文件。
     constructor(config: GenerateServiceProps, openAPIData: OpenAPIObject) {
-        this.finalPath = '';
+        this.finalPath = ''; //存储最终生成文件的路径
         this.config = {
-            projectName: 'api',
-            templatesFolder: join(__dirname, '../', 'templates'),
-            ...config,
+            projectName: 'api', // 生成的文件夹名称
+            templatesFolder: join(__dirname, '../', 'templates'), // 模板文件夹路径
+            ...config, // 用户传入的配置选项
         };
+
+        if (this.config.requestLibrary === 'custom') {
+            this.config.customServicePath = join(process.cwd(), this.config.customServicePath)
+        }
+
         if (this.config.hook?.afterOpenApiDataInited) {
-            this.openAPIData =
-                this.config.hook.afterOpenApiDataInited(openAPIData) || openAPIData;
+            this.openAPIData = this.config.hook.afterOpenApiDataInited(openAPIData) || openAPIData; // 存储解析后的OpenAPI规范数据
         } else {
             this.openAPIData = openAPIData;
         }
-        const {info} = this.openAPIData;
-        const basePath = '';
-        this.version = info.version;
-        const hookCustomFileNames = this.config.hook?.customFileNames || defaultGetFileTag;
-        Object.keys(this.openAPIData.paths || {}).forEach((p) => {
-            const pathItem: PathItemObject = this.openAPIData.paths[p];
-            ['get', 'put', 'post', 'delete', 'patch'].forEach((method) => {
-                const operationObject: OperationObject = pathItem[method];
-                if (!operationObject) {
-                    return;
+        const {info} = this.openAPIData; // 获取OpenAPI规范中的info对象
+        const basePath = ''; // 获取OpenAPI规范中的basePath对象
+        this.version = info.version; // 获取OpenAPI规范中的版本号
+        const hookCustomFileNames = this.config.hook?.customFileNames || defaultGetFileTag; // 获取自定义文件名的钩子函数
+        Object.keys(this.openAPIData.paths || {}).forEach((p) => { // 遍历 openAPIData.paths 对象的所有键（路径）
+            const pathItem: PathItemObject = this.openAPIData.paths[p]; // 获取当前路径的 PathItemObject
+            ['get', 'put', 'post', 'delete', 'patch'].forEach((method) => { // 遍历 HTTP 方法数组
+                const operationObject: OperationObject = pathItem[method]; // 获取当前方法的操作对象
+                if (!operationObject) { // 如果操作对象不存在，则跳过
+                    return; // 直接返回
                 }
 
-                // {{ edit_1 }}: 使用 tags 中的 description 生成文件名
-                const tags = operationObject.tags || [];
-                tags.forEach((tagString) => {
-                    const tag = this.openAPIData.tags.find(t => t.name === tagString);
-                    const fileName = tag ? `${tag.description.replace(/\s+/g, '')}Controller` : `${tagString}Controller`; // 生成 Controller 文件名
+                let tags = hookCustomFileNames(operationObject, p, method); // 使用自定义文件名钩子函数获取标签
+                if (!tags) { // 如果没有获取到标签，则使用默认的获取标签方法
+                    tags = defaultGetFileTag(operationObject, p, method); // 获取默认标签
+                }
 
-                    if (!this.apiData[fileName]) {
-                        this.apiData[fileName] = [];
+                tags.forEach((tagString) => { // 遍历每个标签字符串
+                    const tag = this.config.isCamelCase // 根据配置决定是否将标签转换为驼峰命名
+                        ? camelCase(resolveTypeName(tagString)) // 转换为驼峰命名
+                        : resolveTypeName(tagString); // 保持原样
+
+                    if (!this.apiData[tag]) { // 如果 apiData 中没有该标签，则初始化为空数组
+                        this.apiData[tag] = []; // 初始化标签数组
                     }
-                    this.apiData[fileName].push({
-                        path: `${basePath}${p}`,
-                        method,
-                        ...operationObject,
+                    this.apiData[tag].push({ // 将当前操作对象的信息推入对应标签的数组中
+                        path: `${basePath}${p}`, // 完整路径
+                        method, // HTTP 方法
+                        ...operationObject, // 其他操作对象属性
                     });
                 });
             });
@@ -354,55 +314,61 @@ class ServiceGenerator {
 
     }
 
+    /**
+     * 生成文件的入口函数
+     */
     public genFile() {
-        const basePath = this.config.serversPath || './src/service';
+        const basePath = this.config.serversPath || './src/service'; //basepath是最后生成文件的路径
         try {
             const finalPath = join(basePath, this.config.projectName);
-
-            this.finalPath = finalPath;
+            this.finalPath = finalPath; //最后要生成的文件路径 = basePath + 项目名称
+            // 使用 glob 库同步查找 finalPath 目录下的所有文件
             glob
                 .sync(`${finalPath}/**/*`)
+                // 过滤掉包含 '_deperated' 的文件
                 .filter((ele) => !ele.includes('_deperated'))
+                // 遍历过滤后的文件列表
                 .forEach((ele) => {
+                    // 使用 rimraf 库同步删除每个文件
                     rimraf.sync(ele);
                 });
         } catch (error) {
             Log(`🚥 serves 生成失败: ${error}`);
         }
-        // 生成 ts 类型声明
+        // 生成 ts 类型声明文件
         this.genFileFromTemplate('typings.d.ts', 'interface', {
-            namespace: this.config.namespace,
-            nullable: this.config.nullable,
-            // namespace: 'API',
-            list: this.getInterfaceTP(),
-            disableTypeCheck: false,
+            namespace: this.config.namespace, // 命名空间, 默认为 API
+            nullable: this.config.nullable, // 是否可为空
+            list: this.getInterfaceTP(), // 获取接口类型声明
+            disableTypeCheck: false, // 是否禁用类型检查
         });
-        Log(`✅ 成功生成 interface 文件`);
-        // 生成 controller 文件
-        const prettierError = [];
-        // 生成 service 统计
-        this.getServiceTP().forEach((tp) => {
+
+        // 生成接口controller 文件
+        const prettierError = []; // 定义一个空数组，用于存储格式化错误信息
+        this.getServiceTP().forEach((tp) => { // 遍历每个服务类型 tp
             // 根据当前数据源类型选择恰当的 controller 模版
-            const template = 'serviceController';
-            const hasError = this.genFileFromTemplate(
-                this.getFinalFileName(`${tp.className}.ts`),
-                template,
+            const template = 'serviceController'; // 设置模板为 'serviceController'
+            const hasError = this.genFileFromTemplate( // 调用 genFileFromTemplate 方法生成文件
+                this.getFinalFileName(`${tp.className}.ts`), // 获取最终文件名，格式为 `${tp.className}.ts`
+                template, // 使用指定的模板
                 {
-                    namespace: this.config.namespace,
-                    requestOptionsType: this.config.requestOptionsType,
-                    requestImportStatement: this.config.requestImportStatement,
-                    disableTypeCheck: false,
-                    ...tp,
+                    namespace: this.config.namespace, // 传入命名空间配置
+                    requestOptionsType: this.config.requestOptionsType, // 传入请求选项类型配置
+                    requestImportStatement: this.config.requestImportStatement, // 传入请求导入语句配置
+                    disableTypeCheck: false, // 设置是否禁用类型检查为 false
+                    ...tp, // 展开 tp 对象，传入其他参数
                 },
             );
-            prettierError.push(hasError);
+            prettierError.push(hasError); // 将生成文件的错误信息推入 prettierError 数组
         });
-        Log(`✅ 成功生成 serviceController 文件`);
 
         if (prettierError.includes(true)) {
             Log(`🚥 格式化失败，请检查 service 文件内可能存在的语法错误`);
+        } else {
+            Log(`✅ 成功生成 service controller 文件`);
         }
-        Log(`✅ 格式化serviceController文件成功`);
+
+
         // 生成 index 文件
         this.genFileFromTemplate(`index.ts`, 'serviceIndex', {
             list: this.classNameList,
@@ -410,13 +376,9 @@ class ServiceGenerator {
         });
 
         // 打印日志
-        Log(`✅ 成功生成 service 文件`);
+        Log(`✅ 成功生成 index 文件`);
     }
 
-    public concatOrNull = (...arrays) => {
-        const c = [].concat(...arrays.filter(Array.isArray));
-        return c.length > 0 ? c : null;
-    };
 
     public getFuncationName(data: APIDataType) {
         // 获取路径相同部分
@@ -804,79 +766,82 @@ class ServiceGenerator {
         return templateParams;
     }
 
-    public getInterfaceTP() { // 定义获取接口类型参数的方法
+    /**
+     * 获取接口的类型定义
+     * @returns  {Array}  返回接口的类型定义
+     */
+    public getInterfaceTP() { // 定义一个公共方法 getInterfaceTP，用于获取接口的类型定义
         const {components} = this.openAPIData; // 从 openAPIData 中解构出 components
-        const data = // 定义 data 变量
-            components && // 如果 components 存在
-            components.schemas && // 如果 components.schemas 存在
-            [components.schemas].map((defines) => { // 将 components.schemas 包装成数组并进行映射
-                //这里的 defines 是 components.schemas
+        const data = // 定义一个变量 data，用于存储接口类型信息
+            components && // 检查 components 是否存在
+            components.schemas && // 检查 schemas 是否存在
+            [components.schemas].map((defines) => { // 将 schemas 转换为数组并映射
                 if (!defines) { // 如果 defines 不存在
                     return null; // 返回 null
                 }
 
-                return Object.keys(defines).map((typeName) => { // 遍历 defines 的所有键
-                    // typeName 是键名 对应到 components.schemas 的键名
-                    const result = this.resolveObject(defines[typeName]); // 解析对象
+                return Object.keys(defines).map((typeName) => { // 遍历 defines 的键（类型名）
+                    const result = this.resolveObject(defines[typeName]); // 解析当前类型的对象
 
-                    const getDefinesType = () => { // 定义获取定义类型的函数
-                        if (result.type) { // 如果 result.type 存在
-                            return (defines[typeName] as SchemaObject).type === 'object' || result.type; // 返回类型是否为对象或 result.type
+                    const getDefinesType = () => { // 定义一个函数 getDefinesType，用于获取类型定义
+                        if (result.type) { // 如果 result 有类型
+                            return (defines[typeName] as SchemaObject).type === 'object' || result.type; // 返回类型为 object 或 result 的类型
                         }
-                        return 'Record<string, any>'; // 默认返回 Record<string, any>
+                        return 'Record<string, any>'; // 否则返回 Record<string, any>
                     };
-                    return { // 返回类型信息对象
+                    return { // 返回一个对象，包含类型名、类型、父级、属性和是否为枚举
                         typeName: resolveTypeName(typeName), // 解析类型名
-                        type: getDefinesType(), // 获取定义类型
-                        parent: result.parent, // 父类型
-                        props: result.props || [], // 属性列表
-                        isEnum: result.isEnum, // 是否为枚举
+                        type: getDefinesType(), // 获取类型定义
+                        parent: result.parent, // 获取父级
+                        props: result.props || [], // 获取属性，默认为空数组
+                        isEnum: result.isEnum, // 获取是否为枚举
                     };
                 });
             });
 
+
         // 强行替换掉请求参数params的类型，生成方法对应的 xxxxParams 类型
-        Object.keys(this.openAPIData.paths || {}).forEach((p) => { // 遍历所有路径
-            const pathItem: PathItemObject = this.openAPIData.paths[p]; // 获取路径项
+        Object.keys(this.openAPIData.paths || {}).forEach((p) => { // 遍历 openAPIData.paths 的所有键
+            const pathItem: PathItemObject = this.openAPIData.paths[p]; // 获取当前路径的 PathItemObject
             ['get', 'put', 'post', 'delete', 'patch'].forEach((method) => { // 遍历 HTTP 方法
-                const operationObject: OperationObject = pathItem[method]; // 获取操作对象
+                const operationObject: OperationObject = pathItem[method]; // 获取当前方法的操作对象
                 if (!operationObject) { // 如果操作对象不存在
-                    return; // 跳过当前迭代
+                    return; // 返回
                 }
-                operationObject.parameters = operationObject.parameters?.filter( // 过滤参数
-                    (item) => (item as ParameterObject)?.in !== 'header', // 排除 header 参数
+                operationObject.parameters = operationObject.parameters?.filter( // 过滤掉 header 中的参数
+                    (item) => (item as ParameterObject)?.in !== 'header',
                 );
-                const props = []; // 定义属性数组
-                if (operationObject.parameters) { // 如果有参数
+                const props = []; // 定义一个空数组 props，用于存储参数属性
+                if (operationObject.parameters) { // 如果操作对象有参数
                     operationObject.parameters.forEach((parameter: any) => { // 遍历参数
-                        props.push({ // 添加参数信息
-                            desc: parameter.description ?? '', // 描述
-                            name: parameter.name, // 名称
-                            required: parameter.required, // 是否必需
-                            type: this.getType(parameter.schema), // 类型
+                        props.push({ // 将参数信息推入 props 数组
+                            desc: parameter.description ?? '', // 获取参数描述，默认为空字符串
+                            name: parameter.name, // 获取参数名称
+                            required: parameter.required, // 获取参数是否必填
+                            type: this.getType(parameter.schema), // 获取参数类型
                         });
                     });
                 }
                 // parameters may be in path
                 if (pathItem.parameters) { // 如果路径项有参数
-                    pathItem.parameters.forEach((parameter: any) => { // 遍历参数
-                        props.push({ // 添加参数信息
-                            desc: parameter.description ?? '', // 描述
-                            name: parameter.name, // 名称
-                            required: parameter.required, // 是否必需
-                            type: this.getType(parameter.schema), // 类型
+                    pathItem.parameters.forEach((parameter: any) => { // 遍历路径参数
+                        props.push({ // 将路径参数信息推入 props 数组
+                            desc: parameter.description ?? '', // 获取参数描述，默认为空字符串
+                            name: parameter.name, // 获取参数名称
+                            required: parameter.required, // 获取参数是否必填
+                            type: this.getType(parameter.schema), // 获取参数类型
                         });
                     });
                 }
 
-                if (props.length > 0 && data) { // 如果有属性且 data 存在
-                    data.push([ // 添加到 data 中
+                if (props.length > 0 && data) { // 如果 props 数组有内容且 data 存在
+                    data.push([ // 将新的类型信息推入 data 数组
                         {
                             typeName: this.getTypeName({...operationObject, method, path: p}), // 获取类型名
-                            type: 'Record<string, any>', // 类型
-                            parent: undefined, // 父类型
-                            props: [props], // 属性
-                            isEnum: false, // 不是枚举
+                            type: 'Record<string, any>', // 设置类型为 Record<string, any>
+                            parent: undefined, // 设置父级为 undefined
+                            props: [props], // 将 props 包装为数组
+                            isEnum: false, // 设置是否为枚举为 false
                         },
                     ]);
                 }
@@ -884,32 +849,26 @@ class ServiceGenerator {
         });
         // ---- 生成 xxxparams 类型 end---------
 
-        return ( // 返回处理后的数据
-            data &&
+        return ( // 返回最终的数据
+            data && // 如果 data 存在
             data
-                .reduce((p, c) => p && c && p.concat(c), []) // 合并数组
+                .reduce((p, c) => p && c && p.concat(c), []) // 将 data 中的数组合并
                 // 排序下，要不每次git都乱了
                 .sort((a, b) => a.typeName.localeCompare(b.typeName)) // 按类型名排序
         );
     }
 
-    /**
-     * 生成文件
-     * @param fileName 文件名
-     * @param type 文件类型 interface | serviceController | serviceIndex
-     * @param params 模板参数
-     * @private
-     */
     private genFileFromTemplate(
         fileName: string,
         type: TypescriptFileType,
         params: Record<string, any>,
     ): boolean {
         try {
-            const template = this.getTemplate(type); // 读取整个模板文件的内容
+            const template = this.getTemplate(type);
             // 设置输出不转义
-            nunjucks.configure({autoescape: false,});
-            // 渲染模板 finalPath + fileName 写入文件
+            nunjucks.configure({
+                autoescape: false,
+            });
             return writeFile(this.finalPath, fileName, nunjucks.renderString(template, params));
         } catch (error) {
             // eslint-disable-next-line no-console
@@ -919,6 +878,16 @@ class ServiceGenerator {
     }
 
     private getTemplate(type: 'interface' | 'serviceController' | 'serviceIndex'): string {
+        //如果this.config.requestLibrary 在RequestLibrary中 那么serviceController的模版位置=templatesFolder/this.config.requestLibrary/requestLibrary.njk
+        if (type === 'serviceController') {
+            if (this.config.requestLibrary != 'custom') {
+                return readFileSync(
+                    join(this.config.templatesFolder, this.config.requestLibrary, 'serviceController.njk'),
+                    'utf8',
+                );
+            }
+            return readFileSync(this.config.customServicePath, 'utf-8');
+        }
         return readFileSync(join(this.config.templatesFolder, `${type}.njk`), 'utf8');
     }
 
@@ -1133,3 +1102,4 @@ class ServiceGenerator {
 }
 
 export {ServiceGenerator};
+

@@ -42,3 +42,4 @@ servers
 mocks
 test/file-servers/
 test/servers-allof/
+!/test/gen/

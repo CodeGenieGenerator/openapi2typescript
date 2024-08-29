@@ -18,8 +18,9 @@
     "localConvert4Project": "rm -rf ./test/servers/ ./test/file-servers/ &&  npm run build && cd ./test && node ./test.js && cd .. && rm -rf /Users/fd/wj/psp-web-pro/src/services/wj && mv ./test/servers/api/  /Users/fd/wj/psp-web-pro/src/services/wj",
     "prepublishOnly": "npm run build && np --no-cleanup --yolo --no-publish --any-branch",
     "start": "tsc -w",
-    "test": "rm -rf ./test/servers/ ./test/servers-allof/ ./test/file-servers/ &&  npm run build && cd ./test && node ./test.js && cd ..",
-    "test:windows": "rimraf ./test/servers/ ./test/servers-allof/ ./test/file-servers/ && npm run build && cd ./test && ts-node ./test.js --project tsconfig.json && cd .."
+    "test": "rm -rf ./test/gen/  && ts-node ./test/test.ts && cd ..",
+    "casll-macos": "rm -rf ./test/casll/ && ts-node ./test/casll.ts && cd ..",
+    "casll-windows": "rimraf ./test/casll/ && ts-node ./test/casll.ts && cd .."
   },
   "dependencies": {
     "@umijs/fabric": "^2.5.6",
@@ -28,8 +29,6 @@
     "glob": "^7.1.6",
     "lodash": "^4.17.21",
     "memoizee": "^0.4.15",
-    "mock.js": "^0.2.0",
-    "mockjs": "^1.1.0",
     "node-fetch": "^2.6.1",
     "nunjucks": "^3.2.2",
     "openapi3-ts": "^2.0.1",
@@ -43,6 +42,7 @@
     "@types/express": "^4.17.11",
     "@types/node": "^14.14.22",
     "np": "^7.2.0",
+    "ts-node": "^10.9.2",
     "tslib": "^2.6.0",
     "typescript": "^4.1.3"
   }

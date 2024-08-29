@@ -1,3 +1,4 @@
+// @ts-ignore
 import chalk from 'chalk';
 
 // eslint-disable-next-line no-console
