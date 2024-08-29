@@ -1,13 +1,13 @@
 {
-  "name": "@umijs/openapi",
-  "version": "1.12.1",
-  "description": "",
+  "name": "@yunfeidog/openapi2typescript",
+  "version": "1.0.0",
+  "description": "根据openapi3.0规范生成typescript代码",
   "repository": {
     "type": "git",
-    "url": "git+git@github.com:chenshuai2144/openapi2typescript.git"
+    "url": "git@github.com:CodeGenieGenerator/openapi2typescript.git"
   },
   "license": "MIT",
-  "author": "chenshuai2144",
+  "author": "蔡徐坤",
   "main": "dist/index.js",
   "files": [
     "dist",

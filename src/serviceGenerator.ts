@@ -334,20 +334,16 @@ class ServiceGenerator {
                     return;
                 }
 
-                let tags = hookCustomFileNames(operationObject, p, method);
-                if (!tags) {
-                    tags = defaultGetFileTag(operationObject, p, method);
-                }
-
+                // {{ edit_1 }}: 使用 tags 中的 description 生成文件名
+                const tags = operationObject.tags || [];
                 tags.forEach((tagString) => {
-                    const tag = this.config.isCamelCase
-                        ? camelCase(resolveTypeName(tagString))
-                        : resolveTypeName(tagString);
+                    const tag = this.openAPIData.tags.find(t => t.name === tagString);
+                    const fileName = tag ? `${tag.description.replace(/\s+/g, '')}Controller` : `${tagString}Controller`; // 生成 Controller 文件名
 
-                    if (!this.apiData[tag]) {
-                        this.apiData[tag] = [];
+                    if (!this.apiData[fileName]) {
+                        this.apiData[fileName] = [];
                     }
-                    this.apiData[tag].push({
+                    this.apiData[fileName].push({
                         path: `${basePath}${p}`,
                         method,
                         ...operationObject,
