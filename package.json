@@ -1,6 +1,6 @@
 {
   "name": "@yunfeidog/openapi2typescript",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "根据openapi3.0规范生成typescript代码",
   "repository": {
     "type": "git",
