@@ -20,13 +20,13 @@
 ## 使用
 
 ```shell
-pnpm i --save-dev yunfeidog-openapi2typescript
+pnpm i --save-dev @yunfeidog/openapi2typescript
 ```
 
 在项目根目录新建 ```openapi.config.ts```
 
 ```ts
-import {generateService} from "yunfeidog-openapi2typescript";
+import {generateService} from "@yunfeidog/openapi2typescript";
 
 generateService({
     schemaPath: `${__dirname}/test/openapi.json`,
@@ -41,7 +41,7 @@ generateService({
 供公司使用:
 
 ```ts
-import {generateService} from "yunfeidog-openapi2typescript";
+import {generateService} from "@yunfeidog/openapi2typescript";
 
 let service = ['auth', 'baas', 'docshare', 'did', 'generator', 'governance']
 for (let i = 0; i < service.length; i++) {
