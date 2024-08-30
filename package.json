@@ -20,6 +20,8 @@
     "build": "tsc",
     "start": "tsc -w",
     "test": "rm -rf ./test/gen/  && ts-node ./test/test.ts && cd ..",
+    "test-windows": "rimraf ./test/gen/  && ts-node ./test/test.ts && cd ..",
+
     "casll-macos": "rm -rf ./test/casll/ && ts-node ./test/casll.ts && cd ..",
     "casll-windows": "rimraf ./test/casll/ && ts-node ./test/casll.ts && cd .."
   },

@@ -1,0 +1,168 @@
+// @ts-ignore {# 忽略 TypeScript 检查和 ESLint 规则，确保生成的代码不会触发警告 #}
+/* eslint-disable */
+{{ requestImportStatement }}
+{% for api in list -%} {# 生成 API 函数注释，包含描述、HTTP 方法和 URL #}
+/**
+ * {{ api.desc if api.desc else '此处后端没有提供注释' }}
+ * HTTP Method: {{api.method | upper}}
+ * URL: {{ api.pathInComment | safe }}
+ */
+export async function {{ api.functionName }}(
+{%- if api.params and api.hasParams %}
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象) {#get请求 生成参数类型，如果存在参数则添加 params 参数 #}
+  params
+  {%- if genType === "ts" -%} {# TypeScript 环境下，生成参数类型,如果没有Type则默认为any #}
+  : {{namespace}}.{{api.typeName}}
+    {% if api.params.header -%} {# 处理 header 入参，如果存在 header 参数则生成相应的类型定义 #}
+    & { // header 参数
+    {% for param in api.params.header -%}
+    {% if param.description -%}
+    /** {{ param.description }} */
+    {% endif -%}
+      '{{ param.name }}'
+      {{- "?" if not param.required }}
+      {{- (": " + param.type + ";") | safe }}
+    {% endfor -%}
+    }
+    {%- endif -%}
+  {%- endif -%}
+  {%- if api.hasParams -%}
+  {{ "," if api.body or api.file}}
+  {%- endif -%}
+{%- endif -%}
+{%- if api.body -%}
+  // 请求体参数 {#post请求 生成请求体参数，如果存在请求体则添加 body 参数 #}
+  body
+  {%- if genType === "ts" -%}
+  : {% if api.body.propertiesList %}{
+    {%- for prop in api.body.propertiesList %}
+    {% if prop.schema.description -%}
+    /** {{ prop.schema.description }} */
+    {% endif -%}
+    {{ prop.key }}{{ "?" if not prop.schema.required }}: {{ prop.schema.type }},
+    {%- endfor %}
+  }
+  {%- else -%}
+  {{ api.body.type }}
+  {%- endif -%}
+  {%- endif -%}
+  {{ "," if api.file }}
+{%- endif %}
+{%- if api.file -%} {# 生成文件上传参数，如果存在文件上传则为每个文件添加参数 #}
+{%- for file in api.file -%}
+// 文件上传参数
+{{file.title | safe}}
+{%- if genType === "ts" -%}
+{{- "?" if not api.file.required -}}
+: File {{ "[]" if file.multiple }}
+{%- endif -%}
+{{"," if not loop.last }}
+{%- endfor -%}
+{%- endif -%}
+{{ "," if api.body or api.hasParams or api.file }}
+  // 请求配置选项 {# 生成请求配置选项参数 #}
+  options {{ ("?: " + requestOptionsType) if genType === "ts" }}
+) { {# 生成 API 函数体 #}
+  {% if api.params and api.params.path -%}
+  // 解构路径参数 {# 解构路径参数，如果存在路径参数则进行解构 #}
+  const { {% for param in api.params.path %}'{{ param.name }}': {{ param.alias }}, {% endfor %}
+  {% if api.params.path -%}
+  ...queryParams
+  {% endif -%}
+  } = params;
+  {% endif -%}
+  {% if api.hasFormData -%}
+  // 创建 FormData 对象用于文件上传 {# 创建 FormData 对象，用于处理文件上传和复杂的请求体 #}
+  const formData = new FormData();
+  {% if api.file -%}
+  {% for file in api.file %}
+  // 处理文件上传 {# 处理文件上传，区分单文件和多文件上传 #}
+  if({{file.title | safe}}){
+  {% if file.multiple %}
+  {{file.title | safe}}.forEach(f => formData.append('{{file.title | safe}}', f || ''));
+  {% else %}
+  formData.append('{{file.title | safe}}', {{file.title | safe}})
+  {% endif %}
+  }
+  {% endfor %}
+  {%- endif -%}
+  {% if api.body %}
+  // 将 body 参数添加到 FormData {# 将 body 参数添加到 FormData，处理不同类型的数据 #}
+  Object.keys(body).forEach(ele => {
+    {% if genType === "ts" %}
+    const item = (body as any)[ele];
+    {% else %}
+    const item = body[ele];
+    {% endif %}
+    if (item !== undefined && item !== null) {
+      {% if genType === "ts" %} {# TypeScript 环境下，区分对象、数组和其他类型的处理 #}
+      if (typeof item === 'object' && !(item instanceof File)) {
+        if (item instanceof Array) {
+          item.forEach((f) => formData.append(ele, f || ''));
+        } else {
+          formData.append(ele, JSON.stringify(item));
+        }
+      } else {
+        formData.append(ele, item);
+      }
+      {% else %} {# 非 TypeScript 环境下的简化处理 #}
+      formData.append(ele, typeof item === 'object' ? JSON.stringify(item) : item);
+      {% endif %}
+    }
+  });
+  {% endif %}
+  {% endif -%}
+
+  {% if api.hasPathVariables or api.hasApiPrefix -%}
+  // 发送请求 {# 发送请求（带路径变量或 API 前缀） #}
+  return request{{ ("<" + api.response.type + ">") | safe if genType === "ts" }}(`{{ api.path | safe }}`, {
+  {% else -%}
+  // 发送请求 {# 发送请求（无路径变量或 API 前缀） #}
+  return request{{ ("<" + api.response.type + ">") | safe if genType === "ts" }}('{{ api.path }}', {
+  {% endif -%}
+    method: '{{ api.method | upper }}',
+    {%- if api.hasHeader and api.body.mediaType not in ["multipart/form-data"]%}
+    // 设置请求头 {# 设置请求头，不包括 multipart/form-data 类型 #}
+    headers: {
+      {%- if api.body.mediaType %}
+      'Content-Type': '{{ api.body.mediaType | safe }}',
+      {%- endif %}
+    },
+    {%- endif %}
+    {%- if api.params and api.hasParams %}
+    // 设置查询参数 {# 设置查询参数，包括默认值和复杂类型的处理 #}
+    params: {
+      {%- for query in api.params.query %}
+        {% if query.schema.default -%}
+          // {{query.name | safe}} has a default value: {{ query.schema.default | safe }}
+          '{{query.name | safe}}': '{{query.schema.default | safe}}',
+        {%- endif -%}
+      {%- endfor -%}
+      ...{{ 'queryParams' if api.params and api.params.path else 'params' }},
+      {%- for query in api.params.query %}
+        {%- if query.isComplexType %}
+          '{{query.name | safe}}': undefined, {# 处理复杂类型的查询参数 #}
+          ...{{ 'queryParams' if api.params and api.params.path else 'params' }}['{{query.name | safe}}'],
+        {%- endif %}
+      {%- endfor -%}
+    },
+    {%- endif %}
+    {%- if api.hasFormData %}
+    // 设置表单数据 {# 设置表单数据，用于文件上传和复杂请求体 #}
+    data: formData,
+    {%- if api.body.mediaType === "multipart/form-data" %}
+    {# 特殊处理 multipart/form-data 类型的请求 #}
+    requestType: 'form',
+    {%- endif %}
+    {%- else %}
+    {%- if api.body %}
+    // 设置请求体数据 {# 设置普通请求体数据 #}
+    data: body,
+    {%- endif %}
+    {%- endif %}
+    // 合并用户传入的配置选项 {# 合并用户传入的配置选项，允许覆盖默认设置 #}
+    ...(options || {{api.options | dump}}),
+  });
+}
+
+{% endfor -%}

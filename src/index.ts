@@ -16,7 +16,7 @@ export const generateService = async (
         ...rest
     }: GenerateServiceProps) => {
     const openAPI = await getOpenAPIConfig(schemaPath);
-    const requestImportStatement = getImportStatement(requestLibPath);
+    const requestImportStatement = getImportStatement(requestLibPath,requestLibrary);
     const serviceGenerator = new ServiceGenerator(
         {
             requestLibrary,
