@@ -300,10 +300,14 @@ class ServiceGenerator {
                         ? camelCase(resolveTypeName(tagString)) // 转换为驼峰命名
                         : resolveTypeName(tagString); // 保持原样
 
-                    if (!this.apiData[tag]) { // 如果 apiData 中没有该标签，则初始化为空数组
-                        this.apiData[tag] = []; // 初始化标签数组
+                    // New logic to use the description for the controller name
+                    const tagInfo = this.openAPIData.tags.find(t => t.name === tagString);
+                    const controllerName = tagInfo ? `${tagInfo.description.replace(/\s+/g, '')}Controller` : `${tag}Controller`;
+
+                    if (!this.apiData[controllerName]) { // 如果 apiData 中没有该标签，则初始化为空数组
+                        this.apiData[controllerName] = []; // 初始化标签数组
                     }
-                    this.apiData[tag].push({ // 将当前操作对象的信息推入对应标签的数组中
+                    this.apiData[controllerName].push({ // 将当前操作对象的信息推入对应标签的数组中
                         path: `${basePath}${p}`, // 完整路径
                         method, // HTTP 方法
                         ...operationObject, // 其他操作对象属性
