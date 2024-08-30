@@ -3,7 +3,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "根据openapi3.0规范生成typescript代码",
   "repository": {
     "type": "git",
@@ -21,7 +21,6 @@
     "start": "tsc -w",
     "test": "rm -rf ./test/gen/  && ts-node ./test/test.ts && cd ..",
     "test-windows": "rimraf ./test/gen/  && ts-node ./test/test.ts && cd ..",
-
     "casll-macos": "rm -rf ./test/casll/ && ts-node ./test/casll.ts && cd ..",
     "casll-windows": "rimraf ./test/casll/ && ts-node ./test/casll.ts && cd .."
   },

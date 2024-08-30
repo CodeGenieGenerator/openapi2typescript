@@ -12,22 +12,30 @@ const gen = async () => {
     //     customServicePath: 'test/custom-service-template'
     // });
 
-    //测试umi模版
+    // //测试umi模版
+    // Log("😘正在测试umi模版")
+    // await openAPI.generateService({
+    //     schemaPath: 'http://localhost:10000/codegenie/v3/api-docs',
+    //     serversPath: './test/gen/umi',
+    //     requestLibrary: 'umi',
+    //     customServicePath: 'test/custom-service-template'
+    // });
+    //
+    // //测试axios模版
+    // Log("😘正在测试axios模版")
+    // await openAPI.generateService({
+    //     schemaPath: `${__dirname}/openapi-doc/openapi.json`,
+    //     serversPath: './test/gen/axios',
+    //     requestLibrary: 'axios',
+    //     customServicePath: 'test/custom-service-template',
+    // });
+
+
     Log("😘正在测试umi模版")
     await openAPI.generateService({
-        schemaPath: `${__dirname}/openapi-doc/openapi.json`,
+        schemaPath: `http://localhost:10000/codegenie/v3/api-docs`,
         serversPath: './test/gen/umi',
         requestLibrary: 'umi',
-        customServicePath: 'test/custom-service-template'
-    });
-
-    //测试axios模版
-    Log("😘正在测试axios模版")
-    await openAPI.generateService({
-        schemaPath: `${__dirname}/openapi-doc/openapi.json`,
-        serversPath: './test/gen/axios',
-        requestLibrary: 'axios',
-        customServicePath: 'test/custom-service-template',
     });
 }
 gen()

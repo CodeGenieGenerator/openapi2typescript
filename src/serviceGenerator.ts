@@ -289,7 +289,6 @@ class ServiceGenerator {
                 if (!operationObject) { // 如果操作对象不存在，则跳过
                     return; // 直接返回
                 }
-
                 let tags = hookCustomFileNames(operationObject, p, method); // 使用自定义文件名钩子函数获取标签
                 if (!tags) { // 如果没有获取到标签，则使用默认的获取标签方法
                     tags = defaultGetFileTag(operationObject, p, method); // 获取默认标签
@@ -301,7 +300,7 @@ class ServiceGenerator {
                         : resolveTypeName(tagString); // 保持原样
 
                     // New logic to use the description for the controller name
-                    const tagInfo = this.openAPIData.tags.find(t => t.name === tagString);
+                    const tagInfo = this.openAPIData.tags?.find((t) => t.name === tagString); // 获取标签信息
                     const controllerName = tagInfo ? `${tagInfo.description.replace(/\s+/g, '')}Controller` : `${tag}Controller`;
 
                     if (!this.apiData[controllerName]) { // 如果 apiData 中没有该标签，则初始化为空数组
