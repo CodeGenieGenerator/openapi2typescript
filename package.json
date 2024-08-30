@@ -1,5 +1,8 @@
 {
-  "name": "yunfeidog-openapi2typescript",
+  "name": "@yunfeidog/openapi2typescript",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "1.0.3",
   "description": "根据openapi3.0规范生成typescript代码",
   "repository": {
